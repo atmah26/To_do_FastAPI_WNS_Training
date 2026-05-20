@@ -334,11 +334,3 @@ engine = create_engine("postgresql://user:password@localhost/dbname")
 | `id`          | Integer     | Primary key, auto-increment |
 | `description` | String(100) | Not null                    |
 | `status`      | Boolean     | Not null                    |
-
----
-
-## 📝 Notes
-
-- Never commit `.env`, `local.settings.json`, or `users.db` — add all three to `.gitignore`.
-- The Service Bus connection string is a secret — use **Azure Key Vault** in production instead of storing it in app settings directly.
-- To extend the function (e.g. send an email or call another API on task creation), add your logic after the `logging.info(...)` call in `function_app.py`.
