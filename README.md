@@ -1,6 +1,6 @@
-# ✅ To-Do REST API
+# ✅ To-Do REST API + Azure Function Consumer
 
-A Task management REST API built with **FastAPI**, **SQLAlchemy**, and **Pydantic v2**, developed as part of WNS Training. New task creation events are published to an **Azure Service Bus Queue**.
+A Task management REST API built with **FastAPI**, **SQLAlchemy**, and **Pydantic v2**. New task creation events are published to an **Azure Service Bus Queue** and consumed by a **Python v2 Azure Function**.
 
 ---
 
@@ -8,41 +8,88 @@ A Task management REST API built with **FastAPI**, **SQLAlchemy**, and **Pydanti
 
 ```
 To_do_FastAPI_WNS_Training/
-├── main.py              # FastAPI app — routes and endpoint logic
-├── pydanticmodels.py    # Pydantic schemas with field validators
-├── messaging.py         # Azure Service Bus publisher
-├── table.py             # SQLAlchemy ORM model (Task table)
-├── db.py                # Database engine and session setup
-├── .env.example         # Required environment variables (copy to .env)
+│
+├── api/                          # FastAPI application
+│   ├── main.py                   # Routes and endpoint logic
+│   ├── pydanticmodels.py         # Pydantic schemas with field validators
+│   ├── messaging.py              # Azure Service Bus publisher
+│   ├── table.py                  # SQLAlchemy ORM model (Task table)
+│   ├── db.py                     # Database engine and session setup
+│   └── .env.example              # API environment variables template
+│
+├── functions/                    # Azure Function App
+│   ├── function_app.py           # Service Bus trigger + handler logic
+│   ├── host.json                 # Azure Functions host configuration
+│   ├── requirements.txt          # Function dependencies
+│   └── local.settings.json.example  # Function environment variables template
+│
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
+## 🏗️ Architecture
+
+```
+┌─────────────────┐     POST /tasks/     ┌─────────────────┐
+│                 │ ──────────────────── │                 │
+│   HTTP Client   │                      │   FastAPI API   │
+│  (Swagger/curl) │ ◄─────────────────── │   (main.py)     │
+│                 │    201 + task JSON   │                 │
+└─────────────────┘                      └────────┬────────┘
+                                                  │
+                                                  │ publish task_created event
+                                                  ▼
+                                         ┌─────────────────┐
+                                         │  Azure Service  │
+                                         │   Bus Queue     │
+                                         └────────┬────────┘
+                                                  │
+                                                  │ trigger on new message
+                                                  ▼
+                                         ┌─────────────────┐
+                                         │ Azure Function  │
+                                         │ (function_app)  │
+                                         └─────────────────┘
+```
+
+---
+
 ## ⚙️ Tech Stack
 
-| Layer         | Library           |
-|---------------|-------------------|
-| Web Framework | FastAPI           |
-| ORM           | SQLAlchemy        |
-| Validation    | Pydantic v2       |
-| Database      | SQLite            |
-| Messaging     | Azure Service Bus |
-| Server        | Uvicorn           |
+| Layer              | Library / Service         |
+|--------------------|---------------------------|
+| Web Framework      | FastAPI                   |
+| ORM                | SQLAlchemy                |
+| Validation         | Pydantic v2               |
+| Database           | SQLite                    |
+| Messaging          | Azure Service Bus         |
+| Event Consumer     | Azure Functions (Python v2)|
+| API Server         | Uvicorn                   |
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Clone the repository
+### Prerequisites
+
+- Python 3.9+
+- An Azure account with a Service Bus namespace and queue
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) (for running the function locally)
+
+---
+
+### Part 1 — FastAPI App
+
+#### 1. Clone the repository
 
 ```bash
 git clone https://github.com/atmah26/To_do_FastAPI_WNS_Training.git
-cd To_do_FastAPI_WNS_Training
+cd To_do_FastAPI_WNS_Training/api
 ```
 
-### 2. Create and activate a virtual environment
+#### 2. Create and activate a virtual environment
 
 ```bash
 python -m venv venv
@@ -54,35 +101,93 @@ source venv/bin/activate
 venv\Scripts\activate
 ```
 
-### 3. Install dependencies
+#### 3. Install dependencies
 
 ```bash
 pip install fastapi sqlalchemy pydantic uvicorn azure-servicebus python-dotenv
 ```
 
-### 4. Configure environment variables
+#### 4. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your Azure Service Bus credentials:
+Edit `.env`:
 
 ```
 AZURE_SERVICE_BUS_CONNECTION_STRING=Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<policy>;SharedAccessKey=<key>
 AZURE_SERVICE_BUS_QUEUE_NAME=<your-queue-name>
 ```
 
-You can find the connection string in the Azure Portal under your Service Bus namespace → **Shared access policies**.
-
-### 5. Run the server
+#### 5. Run the API
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://127.0.0.1:8000`.  
-Interactive docs (Swagger UI) at `http://127.0.0.1:8000/docs`.
+API available at `http://127.0.0.1:8000`.  
+Swagger UI at `http://127.0.0.1:8000/docs`.
+
+---
+
+### Part 2 — Azure Function
+
+#### 1. Navigate to the functions folder
+
+```bash
+cd ../functions
+```
+
+#### 2. Create and activate a virtual environment
+
+```bash
+python -m venv venv
+
+# macOS / Linux
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+#### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+#### 4. Configure local settings
+
+```bash
+cp local.settings.json.example local.settings.json
+```
+
+Edit `local.settings.json`:
+
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_SERVICE_BUS_CONNECTION_STRING": "Endpoint=sb://...",
+    "AZURE_SERVICE_BUS_QUEUE_NAME": "task-created"
+  }
+}
+```
+
+#### 5. Start the function
+
+```bash
+func start
+```
+
+You will see:
+```
+Functions:
+    todo_created_handler: serviceBusTrigger
+```
 
 ---
 
@@ -101,7 +206,9 @@ Interactive docs (Swagger UI) at `http://127.0.0.1:8000/docs`.
 
 ## 📨 Azure Service Bus Integration
 
-When a task is successfully created via `POST /tasks/`, a JSON event is published to the configured Service Bus queue.
+### Publisher (API → Queue)
+
+When a task is successfully created via `POST /tasks/`, `messaging.py` publishes a JSON event to the queue.
 
 **Message payload:**
 ```json
@@ -120,7 +227,27 @@ When a task is successfully created via `POST /tasks/`, a JSON event is publishe
 - `content_type`: `application/json`
 - `subject`: `task_created`
 
-**Error handling:** if the Service Bus publish fails, the task is still saved to the database and a response is returned to the caller. The failure is logged as an error and will not interrupt the API.
+If the publish fails, the task is still saved and the API still responds. The failure is logged as an error and does not affect the caller.
+
+---
+
+### Consumer (Queue → Azure Function)
+
+`function_app.py` triggers automatically when a message lands on the queue.
+
+**What it does:**
+- Decodes and deserialises the message body
+- Validates the event type and required fields
+- Logs the event details
+- Raises on malformed messages, sending them to the **dead-letter queue** for inspection after max retries
+
+**Delivery behaviour (configured in `host.json`):**
+
+| Setting                  | Value  | Effect                                              |
+|--------------------------|--------|-----------------------------------------------------|
+| `autoCompleteMessages`   | `true` | Message removed from queue on successful return     |
+| `maxConcurrentCalls`     | `1`    | Processes one message at a time                     |
+| `maxAutoLockRenewalDuration` | `5 min` | Keeps the message locked during slow processing |
 
 ---
 
@@ -145,13 +272,11 @@ When a task is successfully created via `POST /tasks/`, a JSON event is publishe
 }
 ```
 
-> Descriptions are automatically sentence-cased by the validator (e.g. `"buy groceries"` → `"Buy groceries"`).
+> Descriptions are automatically sentence-cased (`"buy groceries"` → `"Buy groceries"`).
 
 ---
 
 ### Update a Task — `PUT /tasks/update/1`
-
-Replaces both fields. Both `description` and `status` are required.
 
 ```json
 {
@@ -164,17 +289,14 @@ Replaces both fields. Both `description` and `status` are required.
 
 ### Toggle Status — `PUT /tasks/change-status/1`
 
-No request body needed. Flips `status` between `true` and `false`.
+No request body. Flips `status` between `true` and `false`.
 
 ---
 
 ### Delete a Task — `DELETE /tasks/1`
 
-**Response `200`:**
 ```json
-{
-  "message": "Task Deleted"
-}
+{ "message": "Task Deleted" }
 ```
 
 ---
@@ -188,19 +310,13 @@ Defined in `pydanticmodels.py` using `@field_validator`:
 | `description` | Required · 3–100 characters · must contain at least one letter · whitespace stripped · auto sentence-cased |
 | `status`      | Required · boolean (`true` / `false`)                                                              |
 
-Invalid requests return `422 Unprocessable Entity` with a message identifying which field failed and why.
+Invalid requests return `422 Unprocessable Entity`.
 
 ---
 
 ## 🗄️ Database
 
-The app uses **SQLite**. The file `users.db` is created automatically on first run via:
-
-```python
-Base.metadata.create_all(engine)
-```
-
-To switch to PostgreSQL or MySQL, update the connection URL in `db.py`:
+SQLite — `users.db` is created automatically on first run. To switch databases, update the connection URL in `db.py`:
 
 ```python
 # PostgreSQL example
@@ -218,3 +334,11 @@ engine = create_engine("postgresql://user:password@localhost/dbname")
 | `id`          | Integer     | Primary key, auto-increment |
 | `description` | String(100) | Not null                    |
 | `status`      | Boolean     | Not null                    |
+
+---
+
+## 📝 Notes
+
+- Never commit `.env`, `local.settings.json`, or `users.db` — add all three to `.gitignore`.
+- The Service Bus connection string is a secret — use **Azure Key Vault** in production instead of storing it in app settings directly.
+- To extend the function (e.g. send an email or call another API on task creation), add your logic after the `logging.info(...)` call in `function_app.py`.

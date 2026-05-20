@@ -6,7 +6,7 @@ import logging
 from db import SessionLocal
 from table import Task
 from pydanticmodels import TaskCreate, TaskResponse
-from messaging import publish_task_created
+from messages import publish_task_created
 
 logger = logging.getLogger(__name__)
 
